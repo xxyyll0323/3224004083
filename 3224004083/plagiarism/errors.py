@@ -13,7 +13,11 @@ class PaperCheckError(Exception):
 
 
 class FileReadError(PaperCheckError):
-    """输入文件不可用：不存在、是目录或无法读取。"""
+    """输入文件不可用：不存在、是目录、无权限或编码无法识别。"""
+
+
+class EmptyTextError(PaperCheckError):
+    """输入文件存在，但内容里没有任何可供比较的有效字符。"""
 
 
 class AnswerWriteError(PaperCheckError):
