@@ -1,0 +1,28 @@
+单元测试与覆盖率报告
+
+Name                       Stmts   Miss  Cover   Missing
+--------------------------------------------------------
+main.py                       31      0   100%
+plagiarism\__init__.py         6      0   100%
+plagiarism\errors.py           5      0   100%
+plagiarism\normalize.py       24      0   100%
+plagiarism\reader.py          53      0   100%
+plagiarism\similarity.py      72      0   100%
+plagiarism\writer.py          24      0   100%
+--------------------------------------------------------
+TOTAL                        215      0   100%
+
+逐文件覆盖情况
+  main.py                        31/31     100.0%
+  plagiarism/__init__.py          6/6      100.0%
+  plagiarism/errors.py            5/5      100.0%
+  plagiarism/normalize.py        24/24     100.0%
+  plagiarism/reader.py           53/53     100.0%
+  plagiarism/similarity.py       72/72     100.0%
+  plagiarism/writer.py           24/24     100.0%
+
+用例总数：72
+失败：0    错误：0
+总体语句覆盖率：100.0%
+覆盖率柱状图：docs/coverage_chart.png
+HTML 明细报告：docs/coverage_html/index.html
