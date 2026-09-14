@@ -5,7 +5,9 @@
 应当以课程发布的为准；本脚本用于在没有官方样例时**自造一份等价的测试集**，
 以及为单元测试和实验报告提供可复现的输入。
 
-运行::
+每个抄袭版变体都由一个独立函数生成，便于单独调整和阅读。
+
+运行（在学号目录下）::
 
     python tools/make_samples.py
 """
@@ -18,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_DIR = ROOT / "sample"
+RANDOM_SEED = 20260914
 
 # 原文：一篇关于"软件工程中的代码复用"的短文，四段共 20 句。
 ORIGINAL_PARAGRAPHS = [
@@ -51,6 +54,7 @@ ORIGINAL_PARAGRAPHS = [
     ],
 ]
 
+# 完全不同主题的短文，用来验证"无关文本得分应该接近 0"。
 UNRELATED_PARAGRAPHS = [
     [
         "红树林生长在热带与亚热带海岸的潮间带上。",
@@ -61,6 +65,7 @@ UNRELATED_PARAGRAPHS = [
     ],
 ]
 
+# 术语替换表，用来模拟"同义改写"这一类抄袭手段。
 SYNONYM_MAP = {
     "代码复用": "代码重用",
     "软件工程": "软件工程学科",
@@ -72,127 +77,134 @@ SYNONYM_MAP = {
     "平衡点": "均衡位置",
 }
 
+# 插入到原文中的新句子，用来模拟"增"。
+EXTRA_SENTENCES = [
+    "需要强调的是，复用决策必须结合团队的实际交付节奏来判断。",
+    "在小规模原型阶段，适度的重复反而比过早抽象更加经济。",
+    "当项目进入长期维护期之后，抽象带来的收益才会逐步显现出来。",
+    "团队应当定期回顾已有的公共组件，清理不再被使用的部分。",
+    "把复用当作一次性任务，是很多技术债产生的直接原因。",
+]
+
 
 def _flatten(paragraphs: list[list[str]]) -> list[str]:
+    """把段落列表拍平成一个句子列表。"""
     return [sentence for paragraph in paragraphs for sentence in paragraph]
 
 
 def _join(paragraphs: list[list[str]]) -> str:
+    """把段落列表拼成最终文本（段内直接相连，段间换行）。"""
     return "\n".join("".join(paragraph) for paragraph in paragraphs) + "\n"
 
 
-def _split_into_sentences(paragraphs: list[list[str]]) -> list[str]:
+def _chunk(sentences: list[str], size: int) -> list[list[str]]:
+    """把句子列表按固定长度重新分段。"""
+    return [sentences[start : start + size] for start in range(0, len(sentences), size)]
+
+
+def variant_added() -> str:
+    """增：在每段末尾插入一句新内容。"""
+    paragraphs = [list(paragraph) for paragraph in ORIGINAL_PARAGRAPHS]
+    for index, extra in enumerate(EXTRA_SENTENCES):
+        paragraphs[index % len(paragraphs)].append(extra)
+    return _join(paragraphs)
+
+
+def variant_deleted() -> str:
+    """删：每段删掉倒数第二句，总量约减少 20%。"""
+    paragraphs = [
+        [sentence for position, sentence in enumerate(paragraph) if position % 4 != 3]
+        for paragraph in ORIGINAL_PARAGRAPHS
+    ]
+    return _join(paragraphs)
+
+
+def variant_rotated() -> str:
+    """乱序（轻）：每个段落内部的句子做一次循环旋转。"""
+    paragraphs = [list(paragraph) for paragraph in ORIGINAL_PARAGRAPHS]
+    for index, sentences in enumerate(paragraphs):
+        cut = len(sentences) // 2
+        paragraphs[index] = sentences[cut:] + sentences[:cut]
+    return _join(paragraphs)
+
+
+def variant_shuffled(rng: random.Random) -> str:
+    """乱序（重）：全部句子整体打乱后重新分段。"""
+    sentences = _flatten(ORIGINAL_PARAGRAPHS)
+    rng.shuffle(sentences)
+    return _join(_chunk(sentences, 4))
+
+
+def variant_word_disorder(rng: random.Random) -> str:
+    """乱序（句内）：把每个句子内部的分句顺序颠倒。"""
     sentences: list[str] = []
-    for paragraph in paragraphs:
-        sentences.extend(paragraph)
-    return sentences
+    for sentence in _flatten(ORIGINAL_PARAGRAPHS):
+        raw_pieces = sentence.replace("，", "|").replace("。", "|").split("|")
+        pieces = [piece for piece in raw_pieces if piece]
+        rng.shuffle(pieces)
+        sentences.append("，".join(pieces) + "。")
+    return _join(_chunk(sentences, 5))
+
+
+def variant_synonym() -> str:
+    """改：把若干术语替换成同义表达。"""
+    sentences: list[str] = []
+    for sentence in _flatten(ORIGINAL_PARAGRAPHS):
+        replaced = sentence
+        for source, target in SYNONYM_MAP.items():
+            replaced = replaced.replace(source, target)
+        sentences.append(replaced)
+    return _join(_chunk(sentences, 5))
+
+
+def variant_html() -> str:
+    """正文不变，但外面包了一层网页外壳，用来验证 HTML 噪声被剥离。"""
+    body = "".join(_flatten(ORIGINAL_PARAGRAPHS))
+    return (
+        "<html><head><title>转载文章</title>"
+        "<style>body{font-size:14px;}</style></head><body>"
+        f"<div class='article'><p>{body}</p>"
+        "<script>var pageId=1024;function track(){return 1;}</script>"
+        "<span>&nbsp;&copy;&nbsp;版权所有&nbsp;</span></div></body></html>\n"
+    )
 
 
 def build_samples() -> dict[str, str]:
     """返回 {文件名: 文本内容}。"""
-    rng = random.Random(20260914)
+    rng = random.Random(RANDOM_SEED)
     original = _join(ORIGINAL_PARAGRAPHS)
-    flat = _flatten(ORIGINAL_PARAGRAPHS)
-    samples: dict[str, str] = {"orig.txt": original}
 
-    # 1. 完全一致
-    samples["orig_1.0.txt"] = original
-
-    # 2. 增加约 25% 内容：在每段后面插入新句子
-    added_paragraphs = [list(paragraph) for paragraph in ORIGINAL_PARAGRAPHS]
-    extra_sentences = [
-        "需要强调的是，复用决策必须结合团队的实际交付节奏来判断。",
-        "在小规模原型阶段，适度的重复反而比过早抽象更加经济。",
-        "当项目进入长期维护期之后，抽象带来的收益才会逐步显现出来。",
-        "团队应当定期回顾已有的公共组件，清理不再被使用的部分。",
-        "把复用当作一次性任务，是很多技术债产生的直接原因。",
-    ]
-    for index, extra in enumerate(extra_sentences):
-        added_paragraphs[index % len(added_paragraphs)].append(extra)
-    samples["orig_0.8_add.txt"] = _join(added_paragraphs)
-
-    # 3. 删除约 20% 内容：每段删掉倒数第二句
-    deleted_paragraphs = [
-        [sentence for position, sentence in enumerate(paragraph) if position % 4 != 3]
-        for paragraph in ORIGINAL_PARAGRAPHS
-    ]
-    samples["orig_0.8_del.txt"] = _join(deleted_paragraphs)
-
-    # 4. 轻微乱序：只在相邻段之间交换 2 句
-    shuffled = [list(paragraph) for paragraph in ORIGINAL_PARAGRAPHS]
-    normal_order = list(range(len(shuffled)))
-    for index, order in zip(normal_order, rng.sample(normal_order, len(normal_order))):
-        sentences = shuffled[index]
-        cut = len(sentences) // 2
-        shuffled[index] = sentences[cut:] + sentences[:cut]
-    samples["orig_0.8_dis_1.txt"] = _join(shuffled)
-
-    # 5. 大幅乱序：全部句子整体打乱后重新分段
-    all_sentences = list(flat)
-    rng.shuffle(all_sentences)
-    chunks = [
-        all_sentences[start : start + 4] for start in range(0, len(all_sentences), 4)
-    ]
-    samples["orig_0.8_dis_2.txt"] = _join(chunks)
-
-    # 6. 段内词序打乱：每个句子内部把分句顺序颠倒
-    word_disorder = []
-    for sentence in flat:
-        pieces = [piece for piece in sentence.replace("，", "|").replace("。", "|").split("|") if piece]
-        rng.shuffle(pieces)
-        word_disorder.append("，".join(pieces) + "。")
-    disorder_chunks = [
-        word_disorder[start : start + 5] for start in range(0, len(word_disorder), 5)
-    ]
-    samples["orig_0.8_dis_3.txt"] = _join(disorder_chunks)
-
-    # 7. 近义词替换：把若干术语换成同义表达
-    synonyms = []
-    for sentence in flat:
-        replaced = sentence
-        for source, target in SYNONYM_MAP.items():
-            replaced = replaced.replace(source, target)
-        synonyms.append(replaced)
-    samples["orig_0.8_syn.txt"] = _join(
-        [synonyms[start : start + 5] for start in range(0, len(synonyms), 5)]
-    )
-
-    # 8. 完全无关：另一主题的短文
-    samples["orig_0.0.txt"] = _join(UNRELATED_PARAGRAPHS)
-
-    # 9. 空文件与纯标点文件
-    samples["orig_empty.txt"] = ""
-    samples["orig_punct_only.txt"] = "。。。！！！？？？,,,...\n"
-
-    # 10. HTML 噪声：正文外面包一层网页样板（模拟从网页抓取的内容）
-    noise_sentences = _split_into_sentences(ORIGINAL_PARAGRAPHS)
-    samples["orig_1.0_html.txt"] = (
-        "<html><head><title>转载文章</title>"
-        "<style>body{font-size:14px;}</style></head><body>"
-        "<div class='article'><p>"
-        + "".join(noise_sentences)
-        + "</p><script>var pageId=1024;function track(){return 1;}</script>"
-        "<span>&nbsp;&copy;&nbsp;版权所有&nbsp;</span></div></body></html>\n"
-    )
-
+    samples: dict[str, str] = {
+        "orig.txt": original,
+        "orig_1.0.txt": original,
+        "orig_1.0_html.txt": variant_html(),
+        "orig_0.8_add.txt": variant_added(),
+        "orig_0.8_del.txt": variant_deleted(),
+        "orig_0.8_dis_1.txt": variant_rotated(),
+        "orig_0.8_dis_2.txt": variant_shuffled(rng),
+        "orig_0.8_dis_3.txt": variant_word_disorder(rng),
+        "orig_0.8_syn.txt": variant_synonym(),
+        "orig_0.0.txt": _join(UNRELATED_PARAGRAPHS),
+        "orig_empty.txt": "",
+        "orig_punct_only.txt": "。。。！！！？？？,,,...\n",
+    }
     return samples
 
 
 def main() -> int:
+    """写出全部样例文件。"""
     SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
     samples = build_samples()
     for name, content in samples.items():
         (SAMPLE_DIR / name).write_text(content, encoding="utf-8", newline="\n")
+        print(f"已生成 sample/{name}  ({len(content)} 字符)")
 
-    # 额外生成一份 GBK 编码的样例，用于验证编码识别。
-    gbk_text = samples["orig_0.8_del.txt"]
-    (SAMPLE_DIR / "orig_0.8_del_gbk.txt").write_bytes(gbk_text.encode("gb18030"))
-
-    for name in sorted(samples):
-        print(f"已生成 sample/{name}  ({len(samples[name])} 字符)")
+    # 额外生成一份 GB18030 编码的样例，用于验证编码识别。
+    gbk_bytes = samples["orig_0.8_del.txt"].encode("gb18030")
+    (SAMPLE_DIR / "orig_0.8_del_gbk.txt").write_bytes(gbk_bytes)
     print("已生成 sample/orig_0.8_del_gbk.txt  (GB18030 编码)")
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - 脚本入口
     sys.exit(main())

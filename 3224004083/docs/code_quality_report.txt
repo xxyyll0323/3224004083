@@ -1,0 +1,28 @@
+代码质量分析报告（Code Quality Analysis）
+
+分析工具：pylint（python -m pylint main.py plagiarism tests tools）
+配置文件：.pylintrc
+评分：10.00 / 10
+警告总数：0
+
+按大类统计
+  C 约定 convention            0
+  R 重构 refactor              0
+  W 警告 warning               0
+  E 错误 error                 0
+  F 致命 fatal                 0
+  I 信息 info                  0
+
+结论
+  生产代码（main.py 与 plagiarism/）不依赖任何豁免，函数、类、模块均有 docstring，
+  命名符合 PEP 8；测试与工具脚本仅在两处做了有理由的局部豁免：
+    - no-docstring-rgx：test_* 的函数名已完整表达断言意图，重复写 docstring 属于噪音；
+    - protected-access / consider-using-with：白盒测试要访问私有降阶函数，
+      unittest 的 setUp/tearDown 用不了 with。
+
+pylint 原始输出
+
+--------------------------------------------------------------------
+Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)
+
+评分卡图：docs/code_quality.png

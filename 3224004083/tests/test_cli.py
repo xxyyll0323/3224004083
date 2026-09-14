@@ -1,27 +1,34 @@
 # -*- coding: utf-8 -*-
-"""命令行入口、答案写出与异常处理的单元测试。"""
+"""命令行入口、答案写出与异常处理的单元测试。
+
+运行方式（在学号目录下）::
+
+    python -m unittest discover -s tests -t .
+"""
 
 from __future__ import annotations
 
 import contextlib
 import io
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# unittest 的 setUp/tearDown 本身就是临时资源的标准管理方式，这里没法用 with，
+# 因此豁免 consider-using-with 检查（只用在本文件的测试夹具上）。
+# pylint: disable=consider-using-with
 
-from main import EXIT_OK, EXIT_RUNTIME_ERROR, EXIT_USAGE_ERROR, main  # noqa: E402
-from plagiarism.writer import format_score, write_answer  # noqa: E402
+from main import EXIT_OK, EXIT_RUNTIME_ERROR, EXIT_USAGE_ERROR, main
+from plagiarism.errors import AnswerWriteError
+from plagiarism.writer import format_score, write_answer
 
 ORIGINAL = "代码复用能够缩短开发周期，并且让经过验证的逻辑被更多项目使用。"
 COPIED = "代码重用能够缩短研发时间，并且让经过验证的程序逻辑被更多项目使用。"
 
 
 class FormatScoreTest(unittest.TestCase):
+    """答案的格式化：两位小数、四舍五入、越界夹紧。"""
+
     def test_keeps_two_decimal_places(self) -> None:
         self.assertEqual(format_score(0.8), "0.80")
         self.assertEqual(format_score(2.0 / 3.0), "0.67")
@@ -36,6 +43,8 @@ class FormatScoreTest(unittest.TestCase):
 
 
 class WriteAnswerTest(unittest.TestCase):
+    """答案文件的写出与写入失败场景。"""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -49,15 +58,17 @@ class WriteAnswerTest(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8"), "0.67\n")
 
     def test_rejects_directory_as_result(self) -> None:
-        with self.assertRaises(Exception):
+        with self.assertRaises(AnswerWriteError):
             write_answer(str(self.tmp), 0.5)
 
     def test_rejects_missing_parent_directory(self) -> None:
-        with self.assertRaises(Exception):
+        with self.assertRaises(AnswerWriteError):
             write_answer(str(self.tmp / "no_such_dir" / "ans.txt"), 0.5)
 
 
 class MainTest(unittest.TestCase):
+    """命令行主流程：退出码、答案内容、异常处理。"""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -70,7 +81,9 @@ class MainTest(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _run(self, argv: list[str]) -> tuple[int, str]:
+    @staticmethod
+    def _run(argv: list[str]) -> tuple[int, str]:
+        """执行一次 main，并捕获写入标准错误的提示信息。"""
         buffer = io.StringIO()
         with contextlib.redirect_stderr(buffer):
             code = main(argv)

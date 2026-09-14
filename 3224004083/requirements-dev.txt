@@ -1,3 +1,13 @@
 # 仅开发与分析阶段需要，运行程序本身不需要安装这些包。
+# 安装：pip install -r requirements-dev.txt
+
+# 单元测试
+pytest>=7.0
+pytest-cov>=4.0
+
+# 覆盖率报告与图表
 coverage>=7.0
 matplotlib>=3.5
+
+# 代码质量分析
+pylint>=3.0

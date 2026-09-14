@@ -25,7 +25,7 @@ EXIT_RUNTIME_ERROR = 1
 EXIT_USAGE_ERROR = 2
 
 
-def _force_utf8_streams() -> None:
+def configure_output_streams() -> None:
     """让标准输出/标准错误在 Windows 控制台上也能打印中文。"""
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -62,5 +62,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover - 进程入口，由子进程测试覆盖
-    _force_utf8_streams()
+    configure_output_streams()
     sys.exit(main())

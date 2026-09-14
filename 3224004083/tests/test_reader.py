@@ -1,25 +1,33 @@
 # -*- coding: utf-8 -*-
-"""文本规范化与文件读取的单元测试。"""
+"""文本规范化与文件读取的单元测试。
+
+运行方式（在学号目录下）::
+
+    python -m unittest discover -s tests -t .
+"""
 
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# unittest 的 setUp/tearDown 本身就是临时资源的标准管理方式，这里没法用 with，
+# 因此豁免 consider-using-with 检查（只用在本文件的测试夹具上）。
+# pylint: disable=consider-using-with
 
-from plagiarism.errors import FileReadError  # noqa: E402
-from plagiarism.normalize import normalize, normalize_reference  # noqa: E402
-from plagiarism.reader import read_text, strip_html  # noqa: E402
+from plagiarism.errors import FileReadError
+from plagiarism.normalize import normalize, normalize_reference
+from plagiarism.reader import read_text, strip_html
 
 
 class NormalizeTest(unittest.TestCase):
+    """文本规范化：只保留汉字、字母与数字。"""
+
     def test_removes_whitespace_and_punctuation(self) -> None:
-        self.assertEqual(normalize("今天是星期天，天气晴。\n\t 晚上 看电影"), "今天是星期天天气晴晚上看电影")
+        self.assertEqual(
+            normalize("今天是星期天，天气晴。\n\t 晚上 看电影"), "今天是星期天天气晴晚上看电影"
+        )
 
     def test_lowercases_latin_letters(self) -> None:
         self.assertEqual(normalize("Hello World!"), "helloworld")
@@ -31,7 +39,8 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(normalize("你好，世界！"), normalize("你好 世界"))
 
     def test_translate_version_matches_reference(self) -> None:
-        # 查表 + translate 的快速实现必须与逐字符参考实现完全一致。
+        # 查表 + translate 的快速实现必须与逐字符参考实现完全一致，
+        # 防止"性能优化改坏了语义"。
         samples = [
             "",
             "。。。！？",
@@ -46,6 +55,8 @@ class NormalizeTest(unittest.TestCase):
 
 
 class StripHtmlTest(unittest.TestCase):
+    """HTML 噪声剥离。"""
+
     def test_plain_text_is_untouched(self) -> None:
         self.assertEqual(strip_html("这是一段普通文本。"), "这是一段普通文本。")
 
@@ -64,6 +75,8 @@ class StripHtmlTest(unittest.TestCase):
 
 
 class ReadTextTest(unittest.TestCase):
+    """文件读取：编码识别、BOM、归一化与错误处理。"""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)

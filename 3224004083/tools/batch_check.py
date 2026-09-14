@@ -29,11 +29,13 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# 这个脚本要能从源码目录里直接运行，不需要先 pip install，所以手动把项目根目录
+# 加进搜索路径；由此产生的"导入不在文件顶部"是刻意为之。
+# pylint: disable=wrong-import-position
+sys.path.insert(0, str(ROOT))
 
-from plagiarism.errors import PaperCheckError  # noqa: E402
-from plagiarism.similarity import compute_similarity  # noqa: E402
+from plagiarism.errors import PaperCheckError
+from plagiarism.similarity import compute_similarity
 
 # 目录模式下要跳过的文件：原文本身、以及非正文的辅助文件。
 SKIP_SUFFIXES = {".py", ".md", ".csv", ".json", ".png", ".jpg"}

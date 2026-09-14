@@ -2,11 +2,17 @@
 """边界场景与异常分支的补充测试。
 
 这些用例专门覆盖正常路径之外的代码：超长文本的降阶策略、编码全部失败的兜底、
-打开文件时的 OSError 包装、以脚本方式启动入口等。
+打开文件时的 OSError 包装、以子进程方式启动入口等。
+
+运行方式（在学号目录下）::
+
+    python -m unittest discover -s tests -t .
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -14,18 +20,23 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# 两点豁免，都只作用于本文件：
+#   protected-access      白盒测试要直接验证私有的降阶策略函数 _select_orders；
+#   consider-using-with   unittest 的 setUp/tearDown 是临时资源的标准管理方式，用不了 with。
+# pylint: disable=protected-access, consider-using-with
 
-import main as cli  # noqa: E402
-from plagiarism.errors import AnswerWriteError, EmptyTextError, FileReadError  # noqa: E402
-from plagiarism.similarity import _select_orders, compute_similarity  # noqa: E402
-from plagiarism.reader import read_text, strip_html  # noqa: E402
-from plagiarism.writer import write_answer  # noqa: E402
+import main as cli
+from plagiarism.errors import AnswerWriteError, EmptyTextError, FileReadError
+from plagiarism.reader import read_text, strip_html
+from plagiarism.similarity import _select_orders, compute_similarity
+from plagiarism.writer import write_answer
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class SelectOrdersTest(unittest.TestCase):
+    """超长文本的降阶策略：规模越大，参与计算的 n 阶越少。"""
+
     def test_very_short_text_uses_first_order_only(self) -> None:
         self.assertEqual(_select_orders(1), [1])
 
@@ -40,6 +51,8 @@ class SelectOrdersTest(unittest.TestCase):
 
 
 class ComputeSimilarityBoundaryTest(unittest.TestCase):
+    """两个文件都没有有效文本时的报错。"""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -67,6 +80,8 @@ class ComputeSimilarityBoundaryTest(unittest.TestCase):
 
 
 class ReaderFallbackTest(unittest.TestCase):
+    """读取阶段的兜底路径：实体解码、BOM、编码全部失败、打开失败。"""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -103,6 +118,8 @@ class ReaderFallbackTest(unittest.TestCase):
 
 
 class WriterFailureTest(unittest.TestCase):
+    """答案写入失败的包装。"""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -123,23 +140,28 @@ class WriterFailureTest(unittest.TestCase):
 
 
 class MainBranchTest(unittest.TestCase):
-    def test_force_utf8_streams_is_callable(self) -> None:
-        cli._force_utf8_streams()
+    """进程入口与无法归类的系统错误。"""
+
+    def test_configure_output_streams_is_callable(self) -> None:
+        cli.configure_output_streams()
 
     def test_unexpected_oserror_returns_runtime_error(self) -> None:
+        buffer = io.StringIO()
         with mock.patch("main.compute_similarity", side_effect=OSError("磁盘故障")):
-            with mock.patch("sys.stderr", new_callable=lambda: __import__("io").StringIO()):
+            with contextlib.redirect_stderr(buffer):
                 code = cli.main(["a.txt", "b.txt", "c.txt"])
         self.assertEqual(code, cli.EXIT_RUNTIME_ERROR)
+        self.assertIn("磁盘故障", buffer.getvalue())
 
     def test_entry_point_script_reports_usage(self) -> None:
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "main.py")],
-            cwd=str(ROOT),
+            [sys.executable, str(PROJECT_ROOT / "main.py")],
+            cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
+            check=False,
         )
         self.assertEqual(completed.returncode, cli.EXIT_USAGE_ERROR)
         self.assertIn("用法", completed.stderr)
@@ -152,13 +174,21 @@ class MainBranchTest(unittest.TestCase):
             answer = tmp_path / "ans.txt"
             original.write_text("代码复用能够缩短开发周期", encoding="utf-8")
             copied.write_text("代码复用能够缩短开发周期", encoding="utf-8")
+            command = [
+                sys.executable,
+                str(PROJECT_ROOT / "main.py"),
+                str(original),
+                str(copied),
+                str(answer),
+            ]
             completed = subprocess.run(
-                [sys.executable, str(ROOT / "main.py"), str(original), str(copied), str(answer)],
-                cwd=str(ROOT),
+                command,
+                cwd=str(PROJECT_ROOT),
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                check=False,
             )
             self.assertEqual(completed.returncode, cli.EXIT_OK)
             self.assertEqual(answer.read_text(encoding="utf-8"), "1.00\n")
