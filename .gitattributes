@@ -1,0 +1,6 @@
+# 默认按文本处理并统一换行，避免跨平台 diff 噪声
+* text=auto eol=lf
+
+# GB18030 编码的样例文件不能按文本处理，否则换行会被改写
+sample/orig_0.8_del_gbk.txt -text
+*.png binary

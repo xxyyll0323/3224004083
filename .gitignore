@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 覆盖率与性能分析产物
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+perf_orig.txt
+perf_copied.txt
+*.pprof
+
+# 程序运行产生的答案文件
+answer.txt
+ans.txt
+result.csv
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+.DS_Store

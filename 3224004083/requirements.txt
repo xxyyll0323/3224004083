@@ -1,0 +1,11 @@
+# 运行时依赖：无。
+#
+# 本程序只使用 Python 标准库（sys / os / re / unicodedata / decimal /
+# collections），不依赖任何第三方包，因此这个文件是空的。
+#
+# 这样做的原因：
+#   1. 作业要求"不连接网络、不访问命令行参数之外的业务文件"，零依赖最稳妥；
+#   2. 评测机不需要联网安装任何包，pip install -r requirements.txt 会立即成功；
+#   3. 不使用 jieba 等外部分词库，中文与英文都能直接处理。
+#
+# 开发/分析阶段用到的可选工具见 requirements-dev.txt。
