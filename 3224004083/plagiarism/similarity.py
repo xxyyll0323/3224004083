@@ -1,27 +1,37 @@
 # -*- coding: utf-8 -*-
-"""核心相似度算法：字符 n-gram 多重集 Dice 加权融合。
+"""核心相似度算法：字符 n-gram 词频向量的余弦相似度（多阶加权融合）。
 
 设计要点
 --------
 1. **字符 n-gram**：中文没有天然分词边界，不引入任何外部分词词典或模型，
    直接把规范化后的字符流切成相邻 n 个字符的片段（n-gram）。
    一个 n-gram 就是文章的一个"指纹片段"。
-2. **多重集而不是普通集合**：``aaaa`` 里的 ``aa`` 出现 3 次，频次要参与计算，
+2. **用频次而不是"是否出现"**：``aaaa`` 里的 ``aa`` 出现 3 次，频次要参与计算，
    这样重复段落的权重不会被抹平。
-3. **Dice 系数**：设两个文本中片段 g 的频次分别为 A(g)、B(g)，则
+3. **余弦相似度**：把每个 n-gram 当成向量的一个维度、出现次数当成分量，则
 
-       overlap = Σ_g min(A(g), B(g))
-       Dice    = 2 × overlap / (|A| + |B|)
+       cos(θ) = (A · B) / (|A| × |B|)
+              = Σ_g A(g)×B(g) / (√Σ_g A(g)² × √Σ_g B(g)²)
 
-   完全相同 → 1，完全不重合 → 0，天然落在 [0, 1] 内。
+   频次非负，夹角不超过 90°，结果天然落在 [0, 1]：完全相同 → 1，无公共片段 → 0。
 4. **多阶融合**：短片段（n=1,2）对局部改写敏感，长片段（n=3,4）更能体现
    稳定内容、对无关文本更有区分度，因此按 0.10/0.20/0.35/0.35 加权。
 5. **与顺序无关**：n-gram 频次是全文统计量，所以"把段落顺序打乱"不会让
    相似度塌掉——这正是作业要求里"能处理段落顺序发生变化的相似内容"。
+
+为什么不用 SimHash
+------------------
+SimHash 靠"降维 + 海明距离"给出近似指纹，适合海量文档的快速粗筛，但它把判定
+阈值藏在了海明距离里，调试时很难回答"这个 0.83 是怎么算出来的"。本题只需要
+"一篇原文 vs 一篇抄袭版"，文本量很小，用不着近似检索；余弦相似度每一步都能
+手算验证（见 tests/test_similarity.py 里的可手算用例），也更容易做单元测试和
+性能优化。两种度量的实测对照见 tools/metric_comparison.py 与
+docs/metric_comparison.txt。
 """
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 
 from .errors import EmptyTextError
@@ -52,26 +62,41 @@ def count_ngrams(text: str, n: int) -> Counter[str]:
     return Counter(text[i : i + n] for i in range(length - n + 1))
 
 
-def dice_overlap(left: Counter[str], right: Counter[str]) -> float:
-    """两个片段频次表的多重集 Dice 系数，取值 [0, 1]。"""
-    left_total = sum(left.values())
-    right_total = sum(right.values())
-    if left_total == 0 and right_total == 0:
+def cosine_similarity(left: Counter[str], right: Counter[str]) -> float:
+    """两个 n-gram 频次向量的余弦相似度，取值 [0, 1]。
+
+    把每个 n-gram 看作向量的一个维度、出现次数看作该维度的分量，则
+
+        cos(θ) = (A · B) / (|A| × |B|)
+               = Σ_g A(g)×B(g) / (√Σ_g A(g)² × √Σ_g B(g)²)
+
+    由于频次都是非负的，夹角不超过 90°，结果天然落在 [0, 1]：
+    完全相同为 1，没有任何公共片段为 0。
+
+    实现上有两点值得注意：
+
+    * 点积只遍历**元素较少**的那一边（``for gram, count in left.items()``），
+      另一边用 ``get`` 查表，避免无谓的全量扫描；
+    * 模长在循环里累加，不额外申请数组，空间是 O(1)。
+    """
+    left_norm = sum(count * count for count in left.values())
+    right_norm = sum(count * count for count in right.values())
+    if left_norm == 0 and right_norm == 0:
         return 1.0
-    if left_total == 0 or right_total == 0:
+    if left_norm == 0 or right_norm == 0:
         return 0.0
 
     if len(left) > len(right):
         left, right = right, left
 
-    overlap = 0
+    dot = 0
     get = right.get
     for gram, count in left.items():
         other = get(gram)
         if other is not None:
-            overlap += count if count < other else other
+            dot += count * other
 
-    return 2.0 * overlap / (left_total + right_total)
+    return dot / (math.sqrt(left_norm) * math.sqrt(right_norm))
 
 
 def _select_orders(max_length: int) -> list[int]:
@@ -86,30 +111,30 @@ def _select_orders(max_length: int) -> list[int]:
 
 
 def ngram_similarity(original: str, copied: str) -> float:
-    """对规范化后的两段文本计算 n-gram Dice 加权相似度。"""
+    """对规范化后的两段文本计算多阶 n-gram 余弦相似度的加权平均。"""
     if original == copied:
         return 1.0
     if not original or not copied:
         return 0.0
 
     orders = _select_orders(max(len(original), len(copied)))
-    weights = {order: NGRAM_WEIGHTS.get(order, 1.0) for order in orders}
-    weight_sum = sum(weights.values())
+    weights = [NGRAM_WEIGHTS.get(order, 1.0) for order in orders]
+    weight_sum = sum(weights)
 
-    score = 0.0
+    scores: list[float] = []
     for order in orders:
         left = count_ngrams(original, order)
         right = count_ngrams(copied, order)
-        score += weights[order] * dice_overlap(left, right)
+        scores.append(cosine_similarity(left, right))
 
-    return score / weight_sum
+    return sum(weight * score for weight, score in zip(weights, scores)) / weight_sum
 
 
 def explain(original: str, copied: str) -> dict[str, float]:
     """给出各阶 n-gram 的得分明细，供测试与实验报告使用。"""
     detail = {"原始长度": float(len(original)), "抄袭版长度": float(len(copied))}
     for order in _select_orders(max(len(original), len(copied))):
-        detail[f"{order}-gram"] = dice_overlap(
+        detail[f"{order}-gram"] = cosine_similarity(
             count_ngrams(original, order), count_ngrams(copied, order)
         )
     detail["最终相似度"] = ngram_similarity(original, copied)

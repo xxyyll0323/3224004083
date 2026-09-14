@@ -1,25 +1,22 @@
 # -*- coding: utf-8 -*-
-"""核心相似度算法的单元测试。"""
+"""核心相似度算法的单元测试。
+
+运行方式（在学号目录下）::
+
+    python -m unittest discover -s tests -t .
+"""
 
 from __future__ import annotations
 
-import sys
+import math
 import unittest
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from plagiarism.similarity import (  # noqa: E402
-    count_ngrams,
-    dice_overlap,
-    explain,
-    ngram_similarity,
-)
+from plagiarism.similarity import count_ngrams, cosine_similarity, explain, ngram_similarity
 
 
 class CountNgramsTest(unittest.TestCase):
+    """特征切片与频次统计。"""
+
     def test_counts_adjacent_pairs(self) -> None:
         self.assertEqual(count_ngrams("abcd", 2), {"ab": 1, "bc": 1, "cd": 1})
 
@@ -38,33 +35,53 @@ class CountNgramsTest(unittest.TestCase):
             count_ngrams("abc", 0)
 
 
-class DiceOverlapTest(unittest.TestCase):
+class CosineOverlapTest(unittest.TestCase):
+    """余弦相似度的边界与可手算数值。"""
+
     def test_identical_counters_give_one(self) -> None:
-        self.assertAlmostEqual(dice_overlap(count_ngrams("abcd", 2), count_ngrams("abcd", 2)), 1.0)
+        grams = count_ngrams("abcd", 2)
+        self.assertAlmostEqual(cosine_similarity(grams, grams), 1.0)
 
     def test_no_common_grams_gives_zero(self) -> None:
-        self.assertAlmostEqual(dice_overlap(count_ngrams("abcd", 2), count_ngrams("wxyz", 2)), 0.0)
+        grams_a = count_ngrams("abcd", 2)
+        grams_b = count_ngrams("wxyz", 2)
+        self.assertAlmostEqual(cosine_similarity(grams_a, grams_b), 0.0)
 
     def test_both_empty_gives_one(self) -> None:
-        self.assertAlmostEqual(dice_overlap({}, {}), 1.0)
+        self.assertAlmostEqual(cosine_similarity({}, {}), 1.0)
 
     def test_one_empty_gives_zero(self) -> None:
-        self.assertAlmostEqual(dice_overlap(count_ngrams("abcd", 2), {}), 0.0)
+        self.assertAlmostEqual(cosine_similarity(count_ngrams("abcd", 2), {}), 0.0)
 
     def test_hand_computed_multiplicity_case(self) -> None:
-        # A："aaaa" → {"aa": 3}；B："aaaaaa" → {"aa": 5}
-        # 2 × min(3,5) / (3+5) = 0.75
-        left = count_ngrams("aaaa", 2)
-        right = count_ngrams("aaaaaa", 2)
-        self.assertAlmostEqual(dice_overlap(left, right), 0.75, places=12)
+        # 两个向量的分量可以完全手算出来：
+        #   A = "甲乙甲乙" -> {"甲乙": 2, "乙甲": 1}   |A|² = 4 + 1       = 5
+        #   B = "甲乙乙甲" -> {"甲乙": 1, "乙乙": 1, "乙甲": 1}   |B|² = 1+1+1 = 3
+        #   点积 = 2×1 + 1×1 = 3
+        #   cos  = 3 / (√5 × √3) = 3 / √15 ≈ 0.774597
+        grams_a = count_ngrams("甲乙甲乙", 2)
+        grams_b = count_ngrams("甲乙乙甲", 2)
+        self.assertAlmostEqual(cosine_similarity(grams_a, grams_b), 3 / math.sqrt(15), places=12)
+
+    def test_single_dimension_vector_scores_one(self) -> None:
+        # 只有一个维度时余弦恒为 1——这正是余弦"对长度不敏感"的体现，
+        # 也就是说单纯把原文复制几遍不会降低得分。这是一个已知取舍，
+        # 在多阶加权里由更长的 n-gram 与超长文本降阶来平衡。
+        grams_a = count_ngrams("aaaa", 2)  # {"aa": 3}
+        grams_b = count_ngrams("aaaaaa", 2)  # {"aa": 5}
+        self.assertAlmostEqual(cosine_similarity(grams_a, grams_b), 1.0, places=12)
 
     def test_is_symmetric(self) -> None:
-        left = count_ngrams("今天是星期天天气晴", 2)
-        right = count_ngrams("今天是周天天气晴朗", 2)
-        self.assertAlmostEqual(dice_overlap(left, right), dice_overlap(right, left), places=12)
+        grams_a = count_ngrams("今天是星期天天气晴", 2)
+        grams_b = count_ngrams("今天是周天天气晴朗", 2)
+        forward = cosine_similarity(grams_a, grams_b)
+        backward = cosine_similarity(grams_b, grams_a)
+        self.assertAlmostEqual(forward, backward, places=12)
 
 
 class NgramSimilarityTest(unittest.TestCase):
+    """多阶加权相似度在各类改写下的表现。"""
+
     def test_identical_text_scores_exactly_one(self) -> None:
         text = "今天是星期天，天气晴，今天晚上我要去看电影。"
         self.assertEqual(ngram_similarity(text, text), 1.0)
@@ -77,9 +94,9 @@ class NgramSimilarityTest(unittest.TestCase):
         self.assertEqual(ngram_similarity("", "今天天气很好"), 0.0)
 
     def test_fully_unrelated_text_stays_low(self) -> None:
-        russian = "红树林生长在热带与亚热带海岸的潮间带上"
+        red_mangrove = "红树林生长在热带与亚热带海岸的潮间带上"
         software = "代码复用是软件工程中被反复讨论的核心议题之一"
-        self.assertLess(ngram_similarity(russian, software), 0.15)
+        self.assertLess(ngram_similarity(red_mangrove, software), 0.15)
 
     def test_insertion_keeps_score_high(self) -> None:
         base = "代码复用能够缩短开发周期并且让经过验证的逻辑被更多项目使用"
@@ -124,27 +141,33 @@ class NgramSimilarityTest(unittest.TestCase):
             ("abc", "xyz"),
             ("今天是星期天天气晴", "今天天气很好我们出去玩"),
         ]
-        for left, right in pairs:
-            score = ngram_similarity(left, right)
+        for original, copied in pairs:
+            score = ngram_similarity(original, copied)
             self.assertGreaterEqual(score, 0.0)
             self.assertLessEqual(score, 1.0)
 
     def test_score_is_symmetric(self) -> None:
-        left = "论文查重算法需要兼顾准确率与运行效率"
-        right = "查重算法要同时考虑准确度与执行速度"
-        self.assertAlmostEqual(ngram_similarity(left, right), ngram_similarity(right, left), places=12)
+        first = "论文查重算法需要兼顾准确率与运行效率"
+        second = "查重算法要同时考虑准确度与执行速度"
+        forward = ngram_similarity(first, second)
+        backward = ngram_similarity(second, first)
+        self.assertAlmostEqual(forward, backward, places=12)
 
 
 class ExplainTest(unittest.TestCase):
+    """逐阶明细接口。"""
+
     def test_explain_reports_every_order(self) -> None:
-        detail = explain("今天是星期天天气晴", "今天是周天天气晴朗")
+        original = "今天是星期天天气晴"
+        copied = "今天是周天天气晴朗"
+        detail = explain(original, copied)
         for order in (1, 2, 3, 4):
             self.assertIn(f"{order}-gram", detail)
             self.assertGreaterEqual(detail[f"{order}-gram"], 0.0)
             self.assertLessEqual(detail[f"{order}-gram"], 1.0)
         self.assertIn("最终相似度", detail)
         self.assertAlmostEqual(
-            detail["最终相似度"], ngram_similarity("今天是星期天天气晴", "今天是周天天气晴朗"), places=12
+            detail["最终相似度"], ngram_similarity(original, copied), places=12
         )
 
 
