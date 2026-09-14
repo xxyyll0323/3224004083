@@ -1,6 +1,6 @@
 # 第一次个人编程作业：论文查重
 
-> 作业 GitHub 链接：**【推送前请把这行换成你的仓库地址】**
+> 作业 GitHub 链接：<https://github.com/xxyyll0323/3224004083>
 
 | 项目 | 内容 |
 |---|---|
@@ -26,9 +26,9 @@
     │   ├── errors.py           自定义异常
     │   ├── reader.py           文件读取、编码识别、HTML 噪声剥离
     │   ├── normalize.py        文本规范化
-    │   ├── similarity.py       核心算法：字符 n-gram 多重集 Dice 加权融合
+    │   ├── similarity.py       核心算法：字符 n-gram 词频向量的余弦相似度
     │   └── writer.py           答案格式化与写出
-    ├── tests/                  72 个单元测试
+    ├── tests/                  73 个单元测试
     ├── tools/                  样例生成、批量查重、性能分析、质量分析、覆盖率
     ├── sample/                 自造测试样例 12 份
     └── docs/                   博客随笔、性能报告、覆盖率报告、代码质量报告

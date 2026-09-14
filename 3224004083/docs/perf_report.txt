@@ -2,45 +2,53 @@
 Python: 3.13.14    平台: win32    重复次数: 5
 
 一、不同输入规模下的运行时间与峰值内存
-规模档位            原文(字符)       抄袭版(字符)       耗时中位数(ms)      峰值内存(MiB)
-小                 5541          4724            15.0            0.2
-中                55386         47074            70.8            0.7
-大               553847        470860           751.6            7.1
+规模档位            原文(字符)       抄袭版(字符)     最快(ms)     中位数(ms)     最慢(ms)     峰值内存(MiB)
+样例级               5541          4724       18.1        19.1       51.7           0.2
+中篇               55386         47074      158.5       162.6      180.4           0.7
+长篇              184616        156831      534.2       597.9      618.4           2.4
+极端              553847        470860     1711.5      1739.9     1812.2           7.1
 
-二、cProfile 热点函数（按自身耗时 tottime 降序，大文本）
-函数                                      调用次数   tottime(s)   cumtime(s)
-<built-in method _collections._count_elements>         8        0.604(48.3%)        1.018
-<genexpr>                            3074115        0.414(33.1%)        0.414
-<built-in method unicodedata.normalize>         2        0.129(10.3%)        0.129
-<method 'translate' of 'str' objects>         2        0.047( 3.8%)        0.047
-_translation_for                           2        0.046( 3.7%)        0.046
-<method 'search' of 're.Pattern' objects>         2        0.003( 0.3%)        0.003
-<built-in method _codecs.utf_8_decode>         2        0.002( 0.1%)        0.002
-<method 'replace' of 'str' objects>         6        0.001( 0.1%)        0.001
-<method 'read' of '_io.BufferedReader' objects>         2        0.001( 0.1%)        0.001
-<built-in method nt._path_isdir>           2        0.001( 0.0%)        0.001
-compute_similarity                         1        0.000( 0.0%)        1.251
-<built-in method _io.open>                 2        0.000( 0.0%)        0.000
+二、cProfile 热点函数（按自身耗时降序，大文本）
+函数                                      调用次数     tottime(s)   cumtime(s)
+<built-in method _collections._count_elements>         8    1.315( 48.4%)        2.229
+<genexpr>                            3074115    0.914( 33.6%)        0.914
+<built-in method unicodedata.normalize>         2    0.279( 10.3%)        0.279
+_translation_for                           2    0.096(  3.5%)        0.096
+<method 'translate' of 'str' objects>         2    0.084(  3.1%)        0.084
+<method 'search' of 're.Pattern' objects>         2    0.012(  0.4%)        0.012
+<built-in method _codecs.utf_8_decode>         2    0.005(  0.2%)        0.005
+<method 'replace' of 'str' objects>         6    0.003(  0.1%)        0.003
+<method 'read' of '_io.BufferedReader' objects>         2    0.003(  0.1%)        0.003
+<built-in method builtins.sum>            10    0.001(  0.0%)        0.002
+<built-in method nt._path_isdir>           2    0.001(  0.0%)        0.001
+<built-in method _io.open>                 2    0.001(  0.0%)        0.001
 
 三、只保留业务函数（200 次重复调用，剔除文件读取与解释器噪声）
-<built-in method _collections._count_elements>   0.1244s   40.6%
-<genexpr>                            0.0821s   26.8%
-dice_overlap                         0.0530s   17.3%
-<method 'get' of 'dict' objects>     0.0340s   11.1%
-<built-in method builtins.sum>       0.0035s    1.1%
-count_ngrams                         0.0030s    1.0%
-__init__                             0.0027s    0.9%
-<built-in method _abc._abc_instancecheck>   0.0013s    0.4%
-update                               0.0009s    0.3%
-<built-in method builtins.isinstance>   0.0007s    0.2%
-<method 'values' of 'dict' objects>   0.0005s    0.2%
-<built-in method builtins.len>       0.0004s    0.1%
+<built-in method _collections._count_elements>:1600   0.2889s   29.1%
+<genexpr>:646800                     0.2051s   20.7%
+<built-in method builtins.sum>:1600   0.1719s   17.3%
+cosine_similarity:800                0.1100s   11.1%
+<method 'get' of 'dict' objects>:354400   0.0874s    8.8%
+<genexpr>:355200                     0.0542s    5.5%
+<genexpr>:355200                     0.0529s    5.3%
+__init__:1600                        0.0085s    0.9%
+count_ngrams:1600                    0.0060s    0.6%
+update:1600                          0.0039s    0.4%
+<built-in method builtins.isinstance>:1600   0.0022s    0.2%
+<built-in method _abc._abc_instancecheck>:1600   0.0019s    0.2%
 
-四、文本规范化实现的改进对比（输入为 55 万字符的大文本）
+四、文本规范化实现的改进对比（输入为 60 万字符极端输入）
 实现方式                         耗时(s)      相对提速
-逐字符 Python 循环                0.171     1.00x
-查表 + str.translate           0.043     3.96x
+逐字符 Python 循环                0.389     1.00x
+查表 + str.translate           0.101     3.85x
 
-五、图表
+五、一个被否决的优化方案：计算期间关闭分代 GC（对照实验）
+写法                           耗时(s)      相对提速
+保持分代 GC 开启                   1.235     1.00x
+计算期间关闭分代 GC                  1.190     1.04x
+结论：两者差距落在测量噪声范围内，收益不足以抵偿引入全局状态的代价，
+      因此最终代码没有采用该方案（结论可复现）。
+
+六、图表
 - 热点函数柱状图：已生成 docs/perf_chart.png
 - 规范化改进对比图：已生成 docs/normalize_compare.png
