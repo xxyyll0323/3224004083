@@ -153,7 +153,7 @@ def main() -> int:
 
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     text = "\n".join(lines)
-    (DOCS_DIR / "metric_comparison.txt").write_text(text, encoding="utf-8", newline="\n")
+    (DOCS_DIR / "metric_comparison.txt").write_text(text, encoding="utf-8")
     print(f"\n对照结论已写入 {DOCS_DIR / 'metric_comparison.txt'}")
     return 0
 

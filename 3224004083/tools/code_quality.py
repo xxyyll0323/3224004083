@@ -154,6 +154,11 @@ def main() -> int:
     total = sum(counts.values())
     score_text = f"{score:.2f}" if score is not None else "未解析到"
 
+    # 如果根本没跑起来（pylint 没装），不要误报成"0 警告"。
+    if score is None and "No module named" in output:
+        print("pylint 未安装，请先执行：pip install -r requirements-dev.txt")
+        return 1
+
     lines = [
         "代码质量分析报告（Code Quality Analysis）",
         "",
@@ -187,7 +192,7 @@ def main() -> int:
     lines.append(f"评分卡图：{'docs/code_quality.png' if chart_ok else '（未安装 matplotlib，跳过）'}")
 
     text = "\n".join(lines)
-    (DOCS_DIR / "code_quality_report.txt").write_text(text, encoding="utf-8", newline="\n")
+    (DOCS_DIR / "code_quality_report.txt").write_text(text, encoding="utf-8")
 
     print(f"\n评分：{score_text} / 10")
     print(f"警告总数：{total}")

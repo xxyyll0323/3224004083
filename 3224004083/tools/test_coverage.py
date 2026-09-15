@@ -186,7 +186,7 @@ def main() -> int:
         html_note=html_note,
     )
     text = "\n".join(_report_lines(summary))
-    (DOCS_DIR / "coverage_report.txt").write_text(text, encoding="utf-8", newline="\n")
+    (DOCS_DIR / "coverage_report.txt").write_text(text, encoding="utf-8")
 
     print("\n" + text.rsplit("逐文件覆盖情况", maxsplit=1)[-1].strip())
     print(f"\n报告已写入 {DOCS_DIR / 'coverage_report.txt'}")

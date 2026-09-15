@@ -385,7 +385,7 @@ def main() -> int:
     report.extend(_chart_lines(rows, before, after))
 
     text = "\n".join(report)
-    (DOCS_DIR / "perf_report.txt").write_text(text, encoding="utf-8", newline="\n")
+    (DOCS_DIR / "perf_report.txt").write_text(text, encoding="utf-8")
     print(text)
     print(f"\n报告已写入 {DOCS_DIR / 'perf_report.txt'}")
     return 0

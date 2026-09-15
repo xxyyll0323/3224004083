@@ -24,3 +24,6 @@ result.csv
 .vscode/
 *.swp
 .DS_Store
+
+# 老师下发的官方测试文本（含《活着》全文，不提交到公开仓库）
+sample/official/

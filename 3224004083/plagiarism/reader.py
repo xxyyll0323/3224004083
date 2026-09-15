@@ -22,7 +22,10 @@ _HTML_HINT = re.compile(
     re.IGNORECASE,
 )
 _SCRIPT_BLOCK = re.compile(r"<\s*(script|style)\b.*?<\s*/\s*\1\s*>", re.IGNORECASE | re.DOTALL)
-_HTML_TAG = re.compile(r"<[^>]{0,200}>")
+# 去掉单个 HTML 标签。长度上限给到 2000：普通标签几十个字符，而网页头部
+# 的 <link> 标签带 integrity="sha384-..."（一段 base64）能到几百字符，上限太小
+# 会导致这类长标签漏剥、把样板混进正文。2000 已足够覆盖，又能避免病态输入。
+_HTML_TAG = re.compile(r"<[^>]{0,2000}>")
 _HTML_ENTITY = re.compile(r"&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]{2,10});")
 
 _NAMED_ENTITIES = {

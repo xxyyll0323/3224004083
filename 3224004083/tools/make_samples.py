@@ -196,7 +196,7 @@ def main() -> int:
     SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
     samples = build_samples()
     for name, content in samples.items():
-        (SAMPLE_DIR / name).write_text(content, encoding="utf-8", newline="\n")
+        (SAMPLE_DIR / name).write_text(content, encoding="utf-8")
         print(f"已生成 sample/{name}  ({len(content)} 字符)")
 
     # 额外生成一份 GB18030 编码的样例，用于验证编码识别。

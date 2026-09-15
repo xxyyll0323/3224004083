@@ -74,7 +74,7 @@ cat answer.txt        # 形如 0.94
    cosine_similarity     每阶算一次余弦：Σ A×B / (√ΣA² × √ΣB²)
         │
         ▼
-   ngram_similarity      按 0.10 / 0.20 / 0.35 / 0.35 加权平均 → [0,1]
+   ngram_similarity      按 0.30 / 0.30 / 0.25 / 0.15 加权平均 → [0,1]
         │
         ▼
    writer.write_answer   格式化为两位小数写入答案文件
