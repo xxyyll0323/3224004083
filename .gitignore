@@ -26,4 +26,8 @@ result.csv
 .DS_Store
 
 # 老师下发的官方测试文本（含《活着》全文，不提交到公开仓库）
-sample/official/
+# 注意：模式里带斜杠时是以 .gitignore 所在目录为锚点的，
+# 所以必须写成 **/sample/official/，否则匹配不到 3224004083/sample/official/。
+**/sample/official/
+测试文本.zip
+*.zip
